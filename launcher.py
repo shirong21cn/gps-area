@@ -25,6 +25,8 @@ APP_NAME = "离线行政区划查询"
 APP_VERSION = "1.0.0"
 # 版本说明（国内版启动器会覆盖这一行：仅打包中国数据）
 EDITION = "全球版：中国县级 + 国外一级区"
+# 页面文件名（国内版启动器会改成 offline_map_cn.html）
+PAGE = "offline_map.html"
 AUTHOR = "老皮"
 QQ = "30922884"
 GITHUB = "shirong21cn"
@@ -74,7 +76,7 @@ def main():
             pass
 
     root = resource_path(".")
-    html = os.path.join(root, "offline_map.html")
+    html = os.path.join(root, PAGE)
     data = os.path.join(root, "data")
 
     if not os.path.exists(html):
@@ -107,7 +109,7 @@ def main():
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
-    url = "http://127.0.0.1:%d/offline_map.html" % port
+    url = "http://127.0.0.1:%d/%s" % (port, PAGE)
     print("=" * 62)
     print("  %s  v%s" % (APP_NAME, APP_VERSION))
     print("=" * 62)

@@ -23,6 +23,7 @@ import launcher
 
 launcher.APP_NAME = "离线行政区划查询（国内版）"
 launcher.EDITION = "国内版：仅中国（含台湾省、香港、澳门）县级数据"
+launcher.PAGE = "offline_map_cn.html"      # 由 build_cn_page.py 从全球版页面派生
 
 
 if __name__ == "__main__":

@@ -14,26 +14,36 @@
 
 有两个版本，数据范围不同，页面与操作完全一致：
 
-| exe | 数据 | 体积 | 适用 |
-|---|---|---|---|---|
-| `dist/离线gps行政区划查询.exe` | **全球版**：中国县级 + 国外一级区 + 国界 | 23.7 MB | 需要判定境外坐标 |
-| `dist/离线gps行政区划查询（国内版）.exe` | **国内版**：仅中国（含台湾省、香港、澳门） | 11.1 MB | 只判国内，体积小、启动快 |
+| exe | 页面 | 数据 | 体积 |
+|---|---|---|---|
+| `dist/离线gps行政区划查询.exe` | `offline_map.html` | **全球版**：中国县级 + 国外一级区 + 国界 | 22.6 MB |
+| `dist/离线gps行政区划查询（国内版）.exe` | `offline_map_cn.html` | **国内版**：仅中国（含台湾省、香港、澳门） | 11.1 MB |
 
 - 双击后自动找空闲端口起本地服务并打开浏览器
 - 按界面提示输入坐标，点「定位并查询所属行政区」
 - 用完在本窗口按 **回车** 关闭服务退出
 - 命令行可查版本：`离线gps行政区划查询.exe --version`
 
-页面共用同一个 `offline_map.html`，它会自己检测有没有国外数据：没有就自动隐藏「世界视图」按钮、跳过国界图层，境外坐标提示"本版本仅含中国数据"。
+两个页面各有各的文件：全球版 `offline_map.html` 引用 4 个 js（含 `world_admin*.js`），国内版 `offline_map_cn.html` 只引用国内 2 个 js，也没有「世界视图」按钮。
 
 ### 方式 2：Python 运行网页版
 
 ```bash
-python launcher.py          # 全球版（当前 data/ 里有什么数据就用什么）
-python launcher_cn.py       # 国内版（横幅标注数据范围）
+python launcher.py          # 全球版 → offline_map.html
+python launcher_cn.py       # 国内版 → offline_map_cn.html
 ```
 
-或直接双击 `offline_map.html`（部分浏览器对本地 `file://` 加载 JS 有限制，推荐用 launcher）。
+也可直接双击这两个 html（部分浏览器对本地 `file://` 加载 JS 有限制，推荐用 launcher）。
+
+### 国内版页面怎么来的
+
+`offline_map_cn.html` 不是手抄的第二份，而是由脚本从全球版派生，避免两边漂移：
+
+```bash
+python build_cn_page.py
+```
+
+脚本做的事：删掉 `world_admin0.js` / `world_admin1.js` 两个引用、把 `HAS_WORLD` 固定为 `false`、删掉「世界视图」按钮、改标题与说明文案。**改页面只改 `offline_map.html`，然后跑一次这个脚本。**
 
 ---
 
@@ -88,8 +98,10 @@ python launcher_cn.py       # 国内版（横幅标注数据范围）
 ```
 离线行政区划查询/
 ├── offline_map.html          离线地图主页面（Canvas 渲染，零依赖）
+├── offline_map_cn.html       国内版页面（由 build_cn_page.py 生成，不引用国外数据）
 ├── launcher.py               启动器：起本地 HTTP 服务 + 开浏览器（全球版）
-├── launcher_cn.py            国内版启动器（复用 launcher.py，只改横幅与版本说明）
+├── launcher_cn.py            国内版启动器（复用 launcher.py，改横幅/版本说明/页面名）
+├── build_cn_page.py          从 offline_map.html 派生国内版页面 offline_map_cn.html
 ├── gps_marker.py             联网版：调百度地图 URI API 生成标注页
 ├── fetch_datav.py            下载国内县级边界（DataV.GeoAtlas）→ counties.js / provinces.js
 ├── fetch_world.py            下载国外边界（geoBoundaries + Natural Earth）→ world_admin*.js
@@ -162,11 +174,12 @@ BD-09 的纬度偏移常数是 **0.006**（网上流传的 0.0036 是错的，�
 ## 七、重新打包 exe
 
 ```bash
+python build_cn_page.py                                                          # 先派生国内版页面
 python -m PyInstaller 离线行政区划查询国内版.spec --noconfirm --distpath dist --workpath build_cn
 python -m PyInstaller 离线行政区划查询.spec --noconfirm --distpath dist --workpath build
 ```
 
-两者共用同一份 `offline_map.html` 与国内数据，差别只在 spec 的 `datas`（国内版不带 `world_admin*.js`）和入口脚本（`launcher_cn.py`）。
+差别只在 spec：国内版入口是 `launcher_cn.py`、`datas` 里是 `offline_map_cn.html` 且不带 `world_admin*.js`。
 
 - 单文件 `--onefile` + 控制台（`--console`），数据是文本，压缩率高：35 MB 数据只让全球版从 11 MB 增到 23.7 MB
 - 版本信息（右键 exe → 属性 → 详细信息）由 `version_info.txt` / `version_info_cn.txt` 写入，UTF-8 编码，中文安全

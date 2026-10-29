@@ -7,7 +7,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('data/counties.js', 'data'), ('data/provinces.js', 'data'),
-           ('offline_map.html', '.')],
+           ('offline_map_cn.html', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

@@ -598,9 +598,12 @@
     document.getElementById('zreset').onclick = function () {
         highlight = null; marker = null; fitChina(); draw();
     };
-    document.getElementById('zworld').onclick = function () {
-        highlight = null; marker = null; fitWorld(); draw();
-    };
+    var zwBtn = document.getElementById('zworld');   // 国内版页面没有这个按钮，需判空
+    if (zwBtn) {
+        zwBtn.onclick = function () {
+            highlight = null; marker = null; fitWorld(); draw();
+        };
+    }
 
     window.addEventListener('resize', resize);
 
