@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="老皮">
+<title>离线行政区划地图 · GPS 坐标定位与坐标转换 · 老皮</title>
+<style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+        font-family: "Microsoft YaHei", "PingFang SC", -apple-system, sans-serif;
+        font-size: 13px; color: #2C2C2A; background: #F7F7F5;
+        display: flex; flex-direction: column;
+    }
+    header {
+        padding: 10px 16px; background: #FFFFFF; border-bottom: 1px solid #E3E1DA;
+        display: flex; align-items: baseline; gap: 12px; flex: none;
+    }
+    header h1 { font-size: 15px; font-weight: 500; margin: 0; }
+    header .sub { font-size: 12px; color: #6B6A65; }
+    header .cr {
+        margin-left: auto; text-align: right; font-size: 12px; color: #6B6A65; line-height: 1.6;
+    }
+    header .cr b { font-weight: 500; color: #2C2C2A; }
+    header .cr a { color: #185FA5; text-decoration: none; }
+    header .cr a:hover { text-decoration: underline; }
+    footer {
+        flex: none; padding: 7px 16px; background: #FFFFFF; border-top: 1px solid #E3E1DA;
+        font-size: 12px; color: #6B6A65; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
+    footer a { color: #185FA5; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    footer .sep { color: #C9C7BF; }
+    footer .copy { margin-left: auto; color: #8A8880; }
+    #watermark {
+        position: absolute; right: 10px; bottom: 10px; font-size: 11px; letter-spacing: .3px;
+        color: rgba(60,60,55,.45); pointer-events: none; user-select: none;
+    }
+    main { flex: 1; display: flex; min-height: 0; }
+    #panel {
+        width: 320px; flex: none; background: #FFFFFF; border-right: 1px solid #E3E1DA;
+        padding: 14px; overflow-y: auto;
+    }
+    #mapwrap { flex: 1; position: relative; min-width: 0; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    #hud {
+        position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92);
+        border: 1px solid #E3E1DA; border-radius: 6px; padding: 6px 10px;
+        font-size: 12px; color: #5F5E5A; font-family: Consolas, monospace; pointer-events: none;
+    }
+    #zoombar { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    #zoombar button, .btn {
+        background: #FFFFFF; border: 1px solid #C9C7BF; border-radius: 6px;
+        padding: 6px 10px; font-size: 13px; cursor: pointer; color: #2C2C2A;
+        font-family: inherit;
+    }
+    #zoombar button:hover, .btn:hover { background: #F1EFE8; }
+    .btn.primary { background: #185FA5; border-color: #185FA5; color: #FFFFFF; width: 100%; padding: 8px; }
+    .btn.primary:hover { background: #0C447C; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; color: #5F5E5A; margin-bottom: 5px; }
+    .field input, .field select {
+        width: 100%; padding: 7px 9px; border: 1px solid #C9C7BF; border-radius: 6px;
+        font-size: 13px; font-family: inherit; color: #2C2C2A; background: #FFFFFF;
+    }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    .check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5F5E5A; margin-top: 6px; }
+    #result { margin-top: 14px; border-top: 1px solid #E3E1DA; padding-top: 14px; }
+    .card { background: #F1EFE8; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .card.hit { background: #E6F1FB; }
+    .card.miss { background: #FCEBEB; }
+    .card .k { font-size: 12px; color: #5F5E5A; }
+    .card .v { font-size: 14px; font-weight: 500; margin-top: 3px; word-break: break-all; }
+    .kv { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+    .kv span:first-child { color: #6B6A65; }
+    .kv span:last-child { font-family: Consolas, monospace; }
+    h2 { font-size: 13px; font-weight: 500; margin: 0 0 8px; }
+    .note { font-size: 12px; color: #6B6A65; line-height: 1.7; margin-top: 12px;
+            border-top: 1px solid #E3E1DA; padding-top: 12px; }
+    .warn { color: #A32D2D; }
+    .ok { color: #0F6E56; }
+</style>
+</head>
+<body>
+<header>
+    <h1>离线行政区划地图</h1>
+    <span class="sub">县级边界 · GPS 定位 · WGS-84 / GCJ-02 / BD-09 互转</span>
+    <div class="cr">
+        <div>作者：<b>老皮</b> · QQ：<b>30922884</b></div>
+        <div>
+            <a href="https://github.com/shirong21cn" target="_blank" rel="noopener">github：shirong21cn</a> ·
+            <a href="https://www.2pascal.com" target="_blank" rel="noopener">www.2pascal.com</a>
+        </div>
+    </div>
+</header>
+<main>
+    <aside id="panel">
+        <div class="field">
+            <label>输入坐标（默认 纬度,经度）</label>
+            <input id="coord" placeholder="39.907375,116.391349" value="39.907375,116.391349">
+            <label class="check"><input type="checkbox" id="lngfirst"> 经度在前（lng,lat）</label>
+        </div>
+        <div class="field">
+            <label>该坐标所属坐标系</label>
+            <select id="srctype">
+                <option value="wgs84">WGS-84（GPS 原始，推荐）</option>
+                <option value="gcj02">GCJ-02（高德/腾讯）</option>
+                <option value="bd09">BD-09（百度）</option>
+            </select>
+        </div>
+        <button class="btn primary" id="locate">定位并查询所属行政区</button>
+
+        <div id="result">
+            <h2>查询结果</h2>
+            <div id="r-hit" class="card"><div class="k">所属行政区</div><div class="v">—</div></div>
+            <div id="r-coords">
+                <div class="kv"><span>WGS-84</span><span id="c-wgs">—</span></div>
+                <div class="kv"><span>GCJ-02</span><span id="c-gcj">—</span></div>
+                <div class="kv"><span>BD-09</span><span id="c-bd">—</span></div>
+            </div>
+            <div style="margin-top:10px">
+                <button class="btn" id="copybd" style="width:100%">复制百度地图标注链接</button>
+            </div>
+        </div>
+
+        <div class="note">
+            <div id="status">数据加载中 ...</div>
+            <div style="margin-top:8px">国内边界来自阿里云 DataV.GeoAtlas（<b>GCJ-02</b>），GPS 原始坐标
+            （WGS-84）自动转 GCJ-02 后匹配，否则会偏移数百米甚至判错区县。</div>
+            <div style="margin-top:8px">国外边界为 <b>WGS-84</b>（geoBoundaries / Natural Earth），境外点不偏移；
+            判定顺序为「先国内、后国外」，因此中国及台港澳一律由国内数据给出。</div>
+            <div style="margin-top:8px">操作：滚轮缩放，拖拽平移，单击地图查询该点所属行政区；
+            「中」回到全国，「世」看世界。</div>
+            <div style="margin-top:8px; color:#8A8880">作者：老皮 · QQ：30922884 ·
+            github：shirong21cn · www.2pascal.com</div>
+        </div>
+    </aside>
+    <div id="mapwrap">
+        <canvas id="map"></canvas>
+        <div id="hud">移动鼠标查看坐标</div>
+        <div id="watermark">© 老皮 · www.2pascal.com</div>
+        <div id="zoombar">
+            <button id="zin" title="放大">+</button>
+            <button id="zout" title="缩小">−</button>
+            <button id="zreset" title="回到全国">中</button>
+            <button id="zworld" title="世界视图">世</button>
+        </div>
+    </div>
+</main>
+
+<footer>
+    <span>作者：老皮</span>
+    <span class="sep">|</span>
+    <span>QQ：30922884</span>
+    <span class="sep">|</span>
+    <span>GitHub：<a href="https://github.com/shirong21cn" target="_blank" rel="noopener">shirong21cn</a></span>
+    <span class="sep">|</span>
+    <span>网站：<a href="https://www.2pascal.com" target="_blank" rel="noopener">www.2pascal.com</a></span>
+    <span class="sep">|</span>
+    <span>边界数据：阿里云 DataV.GeoAtlas（GCJ-02）</span>
+    <span class="copy" id="copyinfo">Copyright © 2026 老皮</span>
+</footer>
+
+<script src="data/provinces.js"></script>
+<script src="data/counties.js"></script>
+<script src="data/world_admin0.js"></script>
+<script src="data/world_admin1.js"></script>
+<script>
+(function () {
+    "use strict";
+
+    // ============================== 坐标转换 ==============================
+    // 常量与业界标准库 gcoord 一致；注意 GCJ-02 -> BD-09 的纬度常数是 0.006，
+    // 网上流传的 0.0036 会导致纬度偏移约 266 米。
+    var PI = Math.PI, A = 6378245.0, EE = 0.00669342162296594323;
+    var X_PI = PI * 3000.0 / 180.0;
+
+    function outOfChina(lng, lat) {
+        return !(lng >= 72.004 && lng <= 137.8347 && lat >= 0.8293 && lat <= 55.8271);
+    }
+    function tLat(x, y) {
+        var r = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+        r += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+        r += (20.0 * Math.sin(y * PI) + 40.0 * Math.sin(y / 3.0 * PI)) * 2.0 / 3.0;
+        r += (160.0 * Math.sin(y / 12.0 * PI) + 320.0 * Math.sin(y * PI / 30.0)) * 2.0 / 3.0;
+        return r;
+    }
+    function tLng(x, y) {
+        var r = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+        r += (20.0 * Math.sin(6.0 * x * PI) + 20.0 * Math.sin(2.0 * x * PI)) * 2.0 / 3.0;
+        r += (20.0 * Math.sin(x * PI) + 40.0 * Math.sin(x / 3.0 * PI)) * 2.0 / 3.0;
+        r += (150.0 * Math.sin(x / 12.0 * PI) + 300.0 * Math.sin(x / 30.0 * PI)) * 2.0 / 3.0;
+        return r;
+    }
+    function wgs84ToGcj02(lng, lat) {
+        if (outOfChina(lng, lat)) { return [lng, lat]; }
+        var dlat = tLat(lng - 105.0, lat - 35.0), dlng = tLng(lng - 105.0, lat - 35.0);
+        var radlat = lat / 180.0 * PI, magic = Math.sin(radlat);
+        magic = 1 - EE * magic * magic;
+        var sq = Math.sqrt(magic);
+        dlat = (dlat * 180.0) / ((A * (1 - EE)) / (magic * sq) * PI);
+        dlng = (dlng * 180.0) / (A / sq * Math.cos(radlat) * PI);
+        return [lng + dlng, lat + dlat];
+    }
+    function gcj02ToWgs84(lng, lat) {
+        var wlng = lng, wlat = lat, t, i;
+        for (i = 0; i < 8; i++) {
+            t = wgs84ToGcj02(wlng, wlat);
+            wlng -= (t[0] - lng); wlat -= (t[1] - lat);
+        }
+        return [wlng, wlat];
+    }
+    function gcj02ToBd09(lng, lat) {
+        var z = Math.sqrt(lng * lng + lat * lat) + 0.00002 * Math.sin(lat * X_PI);
+        var th = Math.atan2(lat, lng) + 0.000003 * Math.cos(lng * X_PI);
+        return [z * Math.cos(th) + 0.0065, z * Math.sin(th) + 0.006];
+    }
+    function bd09ToGcj02(lng, lat) {
+        var x = lng - 0.0065, y = lat - 0.006;
+        var z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * X_PI);
+        var th = Math.atan2(y, x) - 0.000003 * Math.cos(x * X_PI);
+        return [z * Math.cos(th), z * Math.sin(th)];
+    }
+    function toGcj02(lng, lat, src) {
+        if (src === 'gcj02') { return [lng, lat]; }
+        if (src === 'bd09') { return bd09ToGcj02(lng, lat); }
+        return wgs84ToGcj02(lng, lat);
+    }
+    function toWgs84(lng, lat, src) {
+        if (src === 'wgs84') { return [lng, lat]; }
+        if (src === 'bd09') {
+            var t = bd09ToGcj02(lng, lat);
+            return gcj02ToWgs84(t[0], t[1]);
+        }
+        return gcj02ToWgs84(lng, lat);
+    }
+
+    // ============================== 数据 ==============================
+    var PROV = (window.PROVINCE_DATA && window.PROVINCE_DATA.features) || [];
+    var CNT = (window.COUNTY_DATA && window.COUNTY_DATA.features) || [];
+
+    // 国外数据（WGS-84）：国界 + 一级行政区。
+    // 数据包里已剔除 CHN/TWN/HKG/MAC——中国及台港澳一律用上面的国内数据判定，
+    // 避免国外数据源把台湾当成独立国家。
+    var W0 = (window.WORLD_ADMIN0 && window.WORLD_ADMIN0.features) || [];
+    var W1 = (window.WORLD_ADMIN1 && window.WORLD_ADMIN1.features) || [];
+    // 没有国外数据 = 国内版（只打包 counties.js / provinces.js）：
+    // 不显示世界视图、不做境外判定，避免给用户"查不到就是境外"的错觉。
+    var HAS_WORLD = W0.length > 0 || W1.length > 0;
+
+    function eachRing(geom, cb) {
+        var g = geom; if (!g) { return; }
+        if (g.type === 'Polygon') {
+            for (var i = 0; i < g.coordinates.length; i++) { cb(g.coordinates[i]); }
+        } else if (g.type === 'MultiPolygon') {
+            for (var i = 0; i < g.coordinates.length; i++) {
+                for (var j = 0; j < g.coordinates[i].length; j++) { cb(g.coordinates[i][j]); }
+            }
+        }
+    }
+    function bboxOf(f) {
+        var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        eachRing(f.geometry, function (r) {
+            for (var i = 0; i < r.length; i++) {
+                if (r[i][0] < x0) { x0 = r[i][0]; }
+                if (r[i][0] > x1) { x1 = r[i][0]; }
+                if (r[i][1] < y0) { y0 = r[i][1]; }
+                if (r[i][1] > y1) { y1 = r[i][1]; }
+            }
+        });
+        return [x0, y0, x1, y1];
+    }
+    var i, t0 = (new Date()).getTime();
+    for (i = 0; i < PROV.length; i++) { PROV[i].bbox = bboxOf(PROV[i]); }
+    for (i = 0; i < CNT.length; i++) { CNT[i].bbox = bboxOf(CNT[i]); }
+    for (i = 0; i < W0.length; i++) { W0[i].bbox = bboxOf(W0[i]); }
+    for (i = 0; i < W1.length; i++) { W1[i].bbox = bboxOf(W1[i]); }
+
+    // ============================== 投影与视图 ==============================
+    function projX(lng) { return (lng + 180) / 360; }
+    function projY(lat) {
+        var s = Math.sin(lat * PI / 180);
+        return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * PI);
+    }
+    function unprojX(x) { return x * 360 - 180; }
+    function unprojY(y) {
+        var n = PI - 2 * PI * y;
+        return 180 / PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    }
+
+    var view = { cx: projX(104), cy: projY(35), scale: 1 };
+    var canvas = document.getElementById('map');
+    var ctx = canvas.getContext('2d');
+    var W = 0, H = 0, dpr = window.devicePixelRatio || 1;
+
+    function fitChina() {
+        var x0 = projX(73), x1 = projX(136), y0 = projY(54), y1 = projY(17);
+        view.cx = (x0 + x1) / 2; view.cy = (y0 + y1) / 2;
+        var sx = W / (x1 - x0), sy = H / (y1 - y0);
+        view.scale = Math.min(sx, sy) * 0.95;
+    }
+    function fitWorld() {
+        var x0 = projX(-180), x1 = projX(180), y0 = projY(84), y1 = projY(-60);
+        view.cx = (x0 + x1) / 2; view.cy = (y0 + y1) / 2;
+        view.scale = Math.min(W / (x1 - x0), H / (y1 - y0)) * 0.98;
+    }
+    function resize() {
+        var r = canvas.parentNode.getBoundingClientRect();
+        W = r.width; H = r.height;
+        canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+    }
+    function sx(lng) { return (projX(lng) - view.cx) * view.scale + W / 2; }
+    function sy(lat) { return (projY(lat) - view.cy) * view.scale + H / 2; }
+    function toLng(px) { return unprojX((px - W / 2) / view.scale + view.cx); }
+    function toLat(py) { return unprojY((py - H / 2) / view.scale + view.cy); }
+
+    var highlight = null, marker = null;
+
+    function pathRing(r) {
+        ctx.moveTo(sx(r[0][0]), sy(r[0][1]));
+        for (var i = 1; i < r.length; i++) { ctx.lineTo(sx(r[i][0]), sy(r[i][1])); }
+        ctx.closePath();
+    }
+    function drawGeom(geom) {
+        eachRing(geom, pathRing);
+    }
+    function visible(bb) {
+        var lng0 = toLng(0), lng1 = toLng(W), lat0 = toLat(H), lat1 = toLat(0);
+        return !(bb[0] > lng1 || bb[2] < lng0 || bb[1] > lat1 || bb[3] < lat0);
+    }
+
+    function draw() {
+        ctx.fillStyle = '#F7F7F5';
+        ctx.fillRect(0, 0, W, H);
+
+        // 三级分层：世界视野只画国界；放大后画国外一级区；再放大画国内县界
+        var worldView = HAS_WORLD && view.scale < W * 2.2;
+        var showCounty = view.scale > W * 10;
+        var drawn = 0, layer = '';
+
+        if (worldView) {
+            layer = '国界';
+            ctx.beginPath();
+            for (var k = 0; k < W0.length; k++) {
+                if (!visible(W0[k].bbox)) { continue; }
+                drawGeom(W0[k].geometry); drawn++;
+            }
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#C9C7BF';
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
+
+            // 中国（含台港澳）始终用国内数据绘制，保证边界画法正确
+            ctx.beginPath();
+            for (var m = 0; m < PROV.length; m++) { drawGeom(PROV[m].geometry); }
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#9A988F';
+            ctx.lineWidth = 1.1;
+            ctx.stroke();
+        } else {
+            // 国外一级行政区（WGS-84，境外不做任何偏移）
+            ctx.beginPath();
+            for (var k = 0; k < W1.length; k++) {
+                if (!visible(W1[k].bbox)) { continue; }
+                drawGeom(W1[k].geometry); drawn++;
+            }
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#DDDBD3';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+
+            if (showCounty) {
+                layer = '国内县界';
+                ctx.beginPath();
+                for (var i = 0; i < CNT.length; i++) {
+                    if (!visible(CNT[i].bbox)) { continue; }
+                    drawGeom(CNT[i].geometry); drawn++;
+                }
+            } else {
+                layer = '国内省界';
+                ctx.beginPath();
+                for (var i = 0; i < PROV.length; i++) { drawGeom(PROV[i].geometry); }
+            }
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#DDDBD3';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+
+            ctx.beginPath();
+            for (var j = 0; j < PROV.length; j++) { drawGeom(PROV[j].geometry); }
+            ctx.strokeStyle = '#9A988F';
+            ctx.lineWidth = 1.1;
+            ctx.stroke();
+        }
+
+        if (highlight) {
+            ctx.beginPath();
+            drawGeom(highlight.geometry);
+            ctx.fillStyle = 'rgba(24,95,165,0.22)';
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#185FA5';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+        }
+
+        if (marker) {
+            var x = sx(marker[0]), y = sy(marker[1]);
+            ctx.strokeStyle = '#E24B4A'; ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y);
+            ctx.moveTo(x, y - 9); ctx.lineTo(x, y + 9);
+            ctx.stroke();
+            ctx.beginPath(); ctx.arc(x, y, 5, 0, 2 * PI);
+            ctx.fillStyle = '#E24B4A'; ctx.fill();
+            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.6; ctx.stroke();
+        }
+
+        document.getElementById('hud').textContent =
+            '缩放 ' + (view.scale / W).toFixed(2) + 'x · 要素 ' + drawn + '（' + layer + '）';
+    }
+
+    // ============================== 点在多边形内 ==============================
+    function inRing(x, y, r) {
+        var inside = false, n = r.length, j = n - 1;
+        for (var i = 0; i < n; i++) {
+            var xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+            if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) { inside = !inside; }
+            j = i;
+        }
+        return inside;
+    }
+    function inFeature(x, y, f) {
+        var bb = f.bbox;
+        if (x < bb[0] || x > bb[2] || y < bb[1] || y > bb[3]) { return false; }
+        var hit = false;
+        eachRing(f.geometry, function (r) {
+            if (!hit && inRing(x, y, r)) { hit = true; }
+        });
+        return hit;
+    }
+    function locate(x, y) {
+        // x,y 为 GCJ-02（与国内边界数据同坐标系）
+        for (var i = 0; i < CNT.length; i++) {
+            if (inFeature(x, y, CNT[i])) { return CNT[i]; }
+        }
+        return null;
+    }
+    function locateWorld(lng, lat) {
+        // 境外判定：直接用 WGS-84，不做任何偏移转换
+        var i, adm1 = null, adm0 = null;
+        for (i = 0; i < W1.length; i++) {
+            if (inFeature(lng, lat, W1[i])) { adm1 = W1[i]; break; }
+        }
+        for (i = 0; i < W0.length; i++) {
+            if (inFeature(lng, lat, W0[i])) { adm0 = W0[i]; break; }
+        }
+        if (!adm1 && !adm0) { return null; }
+        return { adm1: adm1, adm0: adm0 };
+    }
+
+    // ============================== 交互 ==============================
+    function fmt(p) { return p[1].toFixed(6) + ', ' + p[0].toFixed(6); }
+
+    function showResult(mapPt, wgsKnown) {
+        // mapPt：图上的坐标。国内区域画的是 GCJ-02，国外区域画的是 WGS-84。
+        // 判定顺序：先按 GCJ-02 查国内（命中即中国，台港澳也在这里命中）；
+        // 未命中再用 WGS-84 查国外——这样争议地区会落在国内数据里。
+        var f = locate(mapPt[0], mapPt[1]);
+        var wgs = wgsKnown || (f ? gcj02ToWgs84(mapPt[0], mapPt[1]) : mapPt);
+        var abdroad = !f;
+        var card = document.getElementById('r-hit');
+
+        document.getElementById('c-wgs').textContent = fmt(wgs);
+        document.getElementById('c-gcj').textContent = abdroad ? '—（境外不适用）' : fmt(mapPt);
+        document.getElementById('c-bd').textContent =
+            abdroad ? '—（境外不适用）' : fmt(gcj02ToBd09(mapPt[0], mapPt[1]));
+
+        if (f) {
+            var p = f.properties;
+            card.className = 'card hit';
+            card.innerHTML = '<div class="k">所属行政区</div><div class="v">' +
+                p.province + ' / ' + p.city + ' / ' + p.name + '</div>' +
+                '<div class="k" style="margin-top:6px">行政区划代码</div><div class="v">' +
+                p.adcode + '</div>';
+            highlight = f;
+            marker = mapPt;
+        } else {
+            var w = locateWorld(wgs[0], wgs[1]);
+            if (w) {
+                var p0 = w.adm0 ? w.adm0.properties : null;
+                var p1 = w.adm1 ? w.adm1.properties : null;
+                var cname = p0 ? (p0.zh || p0.n) : (p1 ? p1.g : '—');
+                // Natural Earth 里少数国家（如法国）的 ISO_A3 是 -99，用一级区的国家码兜底
+                var ciso = (p0 && p0.iso && p0.iso !== '-99') ? p0.iso : (p1 ? p1.g : '');
+                var sub = p1 ? (p1.n + (p1.iso ? '（' + p1.iso + '）' : '')) : '—（该国暂无一级区数据）';
+                card.className = 'card hit';
+                card.innerHTML = '<div class="k">所属行政区（境外）</div><div class="v">' +
+                    cname + (ciso ? ' · ' + ciso : '') + '</div>' +
+                    '<div class="k" style="margin-top:6px">一级行政区</div><div class="v">' + sub + '</div>';
+                highlight = w.adm1 || w.adm0;
+                marker = wgs;                       // 国外数据为 WGS-84，落点用 WGS-84
+            } else {
+                card.className = 'card miss';
+                card.innerHTML = '<div class="k">所属行政区</div><div class="v">' +
+                    (HAS_WORLD ? '未命中（可能在海域）'
+                               : '未命中（本版本仅含中国数据，境外 / 海域坐标不参与判定）') +
+                    '</div>';
+                highlight = null;
+                marker = mapPt;
+            }
+        }
+        lastGcj = mapPt;
+        draw();
+    }
+
+    var lastGcj = null;
+
+    document.getElementById('locate').onclick = function () {
+        var raw = document.getElementById('coord').value.trim();
+        var m = raw.split(/[,，;；\s]+/);
+        if (m.length < 2) { alert('请输入两个数值，例如：39.907375,116.391349'); return; }
+        var a = parseFloat(m[0]), b = parseFloat(m[1]);
+        if (isNaN(a) || isNaN(b)) { alert('坐标解析失败，请检查输入'); return; }
+        var lat = document.getElementById('lngfirst').checked ? b : a;
+        var lng = document.getElementById('lngfirst').checked ? a : b;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) { alert('坐标超出合法范围'); return; }
+        var src = document.getElementById('srctype').value;
+        var wgsRaw = toWgs84(lng, lat, src);
+        var gcj = wgs84ToGcj02(wgsRaw[0], wgsRaw[1]);   // 国内边界用 GCJ-02 匹配
+        view.scale = Math.max(view.scale, W * 40);
+        view.cx = projX(gcj[0]); view.cy = projY(gcj[1]);
+        showResult(gcj, wgsRaw);
+    };
+
+    document.getElementById('copybd').onclick = function () {
+        if (!lastGcj) { alert('请先定位'); return; }
+        var bd = gcj02ToBd09(lastGcj[0], lastGcj[1]);
+        var url = 'https://api.map.baidu.com/marker?location=' + bd[1].toFixed(6) + ',' + bd[0].toFixed(6) +
+            '&title=GPS%20%E6%A0%87%E6%B3%A8%E7%82%B9&content=&output=html&coord_type=bd09ll&zoom=17&src=webapp.gps.marker';
+        navigator.clipboard.writeText(url).then(function () {
+            alert('已复制百度地图标注链接（需联网打开）');
+        }, function () { prompt('复制此链接', url); });
+    };
+
+    canvas.addEventListener('mousemove', function (e) {
+        var r = canvas.getBoundingClientRect();
+        var lng = toLng(e.clientX - r.left), lat = toLat(e.clientY - r.top);
+        document.getElementById('hud').textContent =
+            '指针 ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '（GCJ-02）';
+    });
+
+    var drag = null;
+    canvas.addEventListener('mousedown', function (e) {
+        drag = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy, moved: false };
+    });
+    window.addEventListener('mouseup', function (e) {
+        if (!drag) { return; }
+        var far = Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y);
+        drag = null;
+        if (far > 4) { return; }
+        var r = canvas.getBoundingClientRect();
+        var lng = toLng(e.clientX - r.left), lat = toLat(e.clientY - r.top);
+        showResult([lng, lat]);
+    });
+    window.addEventListener('mousemove', function (e) {
+        if (!drag) { return; }
+        var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; }
+        view.cx = drag.cx - dx / view.scale;
+        view.cy = drag.cy - dy / view.scale;
+        draw();
+    });
+
+    function zoomAt(px, py, k) {
+        var lng = toLng(px), lat = toLat(py);
+        view.scale = Math.max(W * 0.5, Math.min(W * 400, view.scale * k));
+        var nx = projX(lng), ny = projY(lat);
+        view.cx = nx - (px - W / 2) / view.scale;
+        view.cy = ny - (py - H / 2) / view.scale;
+        draw();
+    }
+    canvas.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        var r = canvas.getBoundingClientRect();
+        zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.18 : 1 / 1.18);
+    }, { passive: false });
+
+    document.getElementById('zin').onclick = function () { zoomAt(W / 2, H / 2, 1.5); };
+    document.getElementById('zout').onclick = function () { zoomAt(W / 2, H / 2, 1 / 1.5); };
+    document.getElementById('zreset').onclick = function () {
+        highlight = null; marker = null; fitChina(); draw();
+    };
+    document.getElementById('zworld').onclick = function () {
+        highlight = null; marker = null; fitWorld(); draw();
+    };
+
+    window.addEventListener('resize', resize);
+
+    // ============================== 启动 ==============================
+    var st = document.getElementById('status');
+    if (!CNT.length) {
+        st.innerHTML = '<span class="warn">未找到 data/counties.js，请先运行 python fetch_datav.py 下载数据。</span>';
+    } else {
+        st.innerHTML = '<span class="ok">国内县级 ' + CNT.length + ' 个、省级 ' + PROV.length +
+            ' 个（' + ((window.COUNTY_DATA && window.COUNTY_DATA.updated) || '') + '，GCJ-02）。</span>';
+    }
+    if (W0.length || W1.length) {
+        st.innerHTML += '<br><span class="ok">国外国界 ' + W0.length + ' 个、一级区 ' + W1.length +
+            ' 个（WGS-84，已剔除中国/台湾/香港/澳门）。</span>';
+    } else {
+        st.innerHTML += '<br><span class="ok">当前为<b>国内版</b>：仅含中国（含台湾省、香港、澳门）数据，' +
+            '境外坐标不参与判定。需要全球版请运行 python fetch_world.py --all 后重新打包。</span>';
+        var zw = document.getElementById('zworld');
+        if (zw) { zw.style.display = 'none'; }
+    }
+    resize();
+    fitChina();
+    draw();
+})();
+</script>
+</body>
+</html>

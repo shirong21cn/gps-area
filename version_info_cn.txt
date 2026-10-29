@@ -1,0 +1,33 @@
+# -*- coding: utf-8 -*-
+# PyInstaller 版本资源文件（国内版 exe 的属性 → 详细信息）
+VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=(1, 0, 0, 0),
+        prodvers=(1, 0, 0, 0),
+        mask=0x3F,
+        flags=0x0,
+        OS=0x40004,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0),
+    ),
+    kids=[
+        StringFileInfo([
+            StringTable(
+                '080404B0',
+                [
+                    StringStruct('CompanyName', 'www.2pascal.com'),
+                    StringStruct('FileDescription', '离线行政区划查询（国内版）· 仅含中国及台港澳县级数据'),
+                    StringStruct('FileVersion', '1.0.0.0'),
+                    StringStruct('InternalName', 'offline_region_query_cn'),
+                    StringStruct('LegalCopyright', 'Copyright © 2026 老皮 · QQ：30922884 · github：shirong21cn · www.2pascal.com'),
+                    StringStruct('OriginalFilename', '离线gps行政区划查询（国内版）.exe'),
+                    StringStruct('ProductName', '离线行政区划查询（国内版）'),
+                    StringStruct('ProductVersion', '1.0.0.0'),
+                    StringStruct('Comments', '作者：老皮  QQ：30922884  github：shirong21cn  网站：www.2pascal.com'),
+                ],
+            ),
+        ]),
+        VarFileInfo([VarStruct('Translation', [2052, 1200])]),
+    ],
+)

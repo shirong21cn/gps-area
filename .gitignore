@@ -1,0 +1,15 @@
+# 构建产物
+build/
+build_cn/
+dist/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# 下载缓存（由 fetch_world.py 生成，可随时重新下载，约 144MB）
+data/.world_cache/
+
+# 本地工作区数据（含记忆日志，不入库）
+.workbuddy/
